@@ -1,0 +1,49 @@
+name: Unzip and Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  unzip-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+
+      - name: List repo contents
+        run: |
+          echo "=== Repo root ==="
+          ls -lah .
+
+      - name: Set up Node.js (Cloudflare Pages needs it)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Unzip and flatten
+        run: |
+          mkdir extracted
+          for f in *.zip; do
+            # slugify folder name
+            dir="${f%.zip}"
+            slug="$(echo "$dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')"
+            mkdir "$slug"
+            unzip -q "$f" -d "$slug"
+            # move all HTML + any sitemap.xml
+            mv "$slug"/*.html extracted/
+            [ -f "$slug"/sitemap.xml ] && mv "$slug"/sitemap.xml extracted/
+            rm -rf "$slug"
+          done
+          echo "Flattened files:"
+          ls -1 extracted | wc -l
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          projectName: indexpdf-c
+          directory: extracted
